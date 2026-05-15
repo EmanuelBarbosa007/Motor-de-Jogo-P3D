@@ -1,176 +1,130 @@
 #include <iostream>
-#include <array>
+#include <string>
+#include <vector>
 
 #include "Game.h"
 #include "Camera.h"
 #include "Light.h"
 #include "Object.h"
 #include "Shader.h"
-#include "Renderer.h" // Inclui a classe 'Renderer', que define o renderizador a associar a cada objeto do jogo
+#include "Renderer.h"
 
-// ------------------------------------------------------------
-// É aqui que se incluem as suas classes de comportamento personalizados
-// ------------------------------------------------------------
-#include "Oscilator.h" // Inclui a classe 'Oscilator', que define o comportamento do objeto oscilador
+#include "BilliardStrike.h" 
+#include "LightController.h"
 
-
-// Usar um namespace mais curto para facilitar a escrita do código, e.g., 'gep3d::Game' em vez de 'game_engine_p3d::Game'
-namespace gep3d = game_engine_p3d;
-
+using namespace game_engine_p3d;
 
 int main() {
-	//using namespace gep3d;
+    Game game(1280, 720, "Trabalho Pratico - Mesa de Bilhar");
 
-	// NOTA: Ao definir para PT as definições regionais, alteramos a forma como o programa interpreta os números decimais (e.g., o separador decimal passa a ser a vírgula ',' em vez do ponto '.').
-	//       Tal pode causar problemas na leitura de ficheiros de texto que contenham números decimais, como os shaders ou os modelos 3D (ficheiros .obj e outros).
-	//       Por exemplo, se um shader ou modelo 3D contiver um número decimal como '0.5', o programa pode interpretar isso como '0,5' e não conseguir ler corretamente o valor, levando a erros de compilação do shader ou de carregamento do modelo.
-	//       Assim, nas funções que realizam a leitura de ficheiros de texto que contenham números decimais, é importante garantir que o programa esteja a utilizar a locale correta.
-	//       Devemos guardar a locale que estamos a utilizar no programa, e definir explicitamente a locale para "C" ou "en_US.UTF-8" (que usam o ponto como separador decimal) antes de ler os ficheiros de texto, e depois restaurar a locale original do programa.
-	// Definições regionais (locale)
-	try {
-		// locale para português de Portugal
-#ifdef __linux__
-		std::locale::global(std::locale("pt_PT"));
-#else
-		std::locale::global(std::locale("pt-PT"));
-#endif
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Erro ao definir locale: " << e.what() << std::endl;
-	}
+    // CÂMARA: Imóvel orientada para o centro, com visão total da mesa
+    Camera* camera = new Camera();
+    camera->set_background_color(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+    camera->LookAt(
+        glm::vec3(0.0f, 22.0f, 25.0f),  // Posição: Alta e atrás
+        glm::vec3(0.0f, 0.0f, -2.0f),   // Centro: Orientada para o meio
+        glm::vec3(0.0f, 1.0f, 0.0f)
+    );
+    camera->Prespective(40.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
+    game.AddCamera(camera);
 
-	// --------------------------------------------------
-	// Cria uma instância do jogo
-	// --------------------------------------------------
-	gep3d::Game game(400, 300);
+    // 4 FONTES DE LUZ (Requisito)
 
-	// --------------------------------------------------
-	// Preparação da(s) câmara(s)
-	// --------------------------------------------------
-	// Instancia a câmara
-	gep3d::Camera camera;
-	// Define a cor de fundo da câmara
-	camera.set_background_color(glm::vec4(0.1f, 0.1f, 0.1f, 1.0f));
-	// Define a posição da câmara e o ponto de vista
-	camera.LookAt(glm::vec3(5.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	// Define a projeção perspetiva da câmara
-	camera.Prespective(45.0f, static_cast<float>(game.width()) / game.height(), 0.1f, 100.0f);
-	//camera.Orthographic(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 100.0f); // Define a projeção ortográfica
-	// Define a viewport da câmara
-	camera.Viewport(game.width(), game.height(), 0, 0);
-	// Adiciona layers à máscara de culling da câmara
-	std::array<std::string, 3> layers = { "Default", "Environment", "UI" };
-	for (const auto& layer : layers) {
-		camera.AddLayerToCullingMask(layer); // Adiciona a layer à máscara de culling da câmara
-	}
+    // Luz Ambiente (Tecla 1)
+    Light* ambient_light = new Light();
+    ambient_light->set_type(LightType::kAmbient);
+    ambient_light->set_ambient(glm::vec3(0.4f, 0.4f, 0.4f));
+    game.AddLight(ambient_light);
 
-	// Adiciona a câmara ao jogo (a primeira câmara adicionada é considerada a "Main Camera")
-	game.AddCamera(&camera);
+    // Luz Direcional (Tecla 2)
+    Light* dir_light = new Light();
+    dir_light->set_type(LightType::kDirectional);
+    dir_light->set_direction(glm::vec3(0.5f, -1.0f, -0.5f));
+    dir_light->set_diffuse(glm::vec3(0.3f, 0.3f, 0.3f));
+    game.AddLight(dir_light);
 
-	// --------------------------------------------------
-	// Preparação da(s) luzes(es)
-	// --------------------------------------------------
-	// Cria uma luz ambiente
-	gep3d::Light* ambient_light = new gep3d::Light(glm::vec3(0.1f, 0.1f, 0.1f)); // Cor da luz ambiente
-	// Cria uma luz direcional (ex: sol)
-	gep3d::Light* directional_light = new gep3d::Light(
-		glm::vec3(0.0f, 0.0f, -1.0f),	// Direção da luz
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente ambiente
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente difusa
-		glm::vec3(1.0f, 1.0f, 1.0f)     // Componente especular
-	);
-	// Cria uma luz pontual (ex: lâmpada)
-	gep3d::Light* point_light = new gep3d::Light(
-		glm::vec3(0.0f, 0.0f, -1.0f),	// Posição da luz
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente ambiente
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente difusa
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente especular
-		1.0f,                           // Constante de atenuação
-		0.09f,                          // Linear de atenuação
-		0.032f                          // Quadrática de atenuação
-	);
-	// Cria uma luz cónica (spotlight)
-	gep3d::Light* spot_light = new gep3d::Light(
-		glm::vec3(0.0f, 0.0f, -1.0f),  // Posição da luz
-		glm::vec3(0.0f, 0.0f, -1.0f),   // Direção da luz
-		glm::vec3(0.0f, 0.0f, 0.0f),    // Componente ambiente
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente difusa
-		glm::vec3(1.0f, 1.0f, 1.0f),    // Componente especular
-		1.0f,                           // Constante de atenuação
-		0.09f,                          // Linear de atenuação
-		0.032f,                         // Quadrática de atenuação
-		10.0f,							// CutOff (ângulo interno, em graus)
-		20.0f							// OuterCutOff (ângulo externo, em graus)
-	);
-	// Adiciona a luz ambiente ao jogo
-	game.AddLight(ambient_light);
-	// Adiciona a luz direcional ao jogo
-	game.AddLight(directional_light);
-	// Adiciona a luz pontual ao jogo
-	game.AddLight(point_light);
-	// Adiciona a luz cónica ao jogo
-	game.AddLight(spot_light);
+    // Luz Pontual (Tecla 3)
+    Light* point_light = new Light();
+    point_light->set_type(LightType::kPoint);
+    point_light->set_position(glm::vec3(0.0f, 5.0f, -4.0f));
+    point_light->set_diffuse(glm::vec3(0.7f, 0.1f, 0.1f));
+    point_light->set_specular(glm::vec3(0.7f, 0.1f, 0.1f));
+    point_light->set_constant(1.0f);
+    point_light->set_linear(0.02f);
+    game.AddLight(point_light);
 
-	// --------------------------------------------------
-	// Preparação do(s) programa(s) shader
-	// --------------------------------------------------
-	// Para um programa shader, indica os tipos de shaders que serão usados e os respetivos caminhos para os ficheiros de código shader
-	std::vector<ShaderSource> sources = {
-		{GL_VERTEX_SHADER, "light.vert" /*"default_shader.vert"*/},
-		{GL_FRAGMENT_SHADER, "light.frag" /*"default_shader.frag"*/}
-	};
-	// Cria o programa shader (lê e compila os shaders de um programa shader, a partir dos ficheiros especificados em 'sources')
-	// O nome do shader é opcional, mas pode ser útil para identificação
-	Shader* shader = new Shader(sources, "DefaultShader");
+    // Luz "Dummy" (Oculta para evitar bugs do OpenGL)
+    Light* point_light_dummy = new Light();
+    point_light_dummy->set_type(LightType::kPoint);
+    point_light_dummy->set_constant(1.0f);
+    game.AddLight(point_light_dummy);
 
-	// --------------------------------------------------
-	// Preparação do(s) renderizador(es)
-	// --------------------------------------------------
-	// Cria o renderizador com o shader especificado e o caminho do modelo 3D (ficheiro OBJ)
-	Renderer* renderer = new Renderer(shader, "model.obj");
+    // Luz Cónica (Tecla 4)
+    Light* spot_light = new Light();
+    spot_light->set_type(LightType::kSpotlight);
+    spot_light->set_position(glm::vec3(0.0f, 25.0f, -5.0f));
+    spot_light->set_direction(glm::vec3(0.0f, -1.0f, 0.0f));
+    spot_light->set_diffuse(glm::vec3(1.2f, 1.2f, 1.2f));
+    spot_light->set_specular(glm::vec3(1.5f, 1.5f, 1.5f));
+    spot_light->set_constant(1.0f);
+    spot_light->set_linear(0.002f);
+    spot_light->set_cutOff(45.0f);
+    game.AddLight(spot_light);
 
-	// --------------------------------------------------
-	// Preparação do(s) comportamento(s) do(s) objeto(s)
-	// --------------------------------------------------
-	// Cria uma instância do comportamento Oscilator
-	Oscilator* oscilator = new Oscilator();
+    // SHADER
+    std::vector<ShaderSource> shader_sources = {
+        {GL_VERTEX_SHADER, "light.vert"},
+        {GL_FRAGMENT_SHADER, "light.frag"}
+    };
+    Shader* shader = new Shader(shader_sources, "Shader de Luz");
 
-	// --------------------------------------------------
-	// Preparação do(s) objeto(s) do jogo
-	// --------------------------------------------------
-	// Instancia um objeto do jogo
-	// Cria um objeto com nome "Objecto (1)" e layer padrão ("" = "Default")
-	// Atribui um comportamento 'oscilator' ao objeto, que será executado no ciclo de atualização do jogo
-	// Atribui um renderizador ao objeto, que será usado para renderizar o objeto no jogo
-	// Define a posição do objeto como (0, -4, 0), no sistema de coordenadas local, com orientação e escala padrão
-	gep3d::Object* object1 = new gep3d::Object("Objecto (1)", "", oscilator, renderer, 0.0f, -4.0f, 0.0f);
-	// Cria um segundo objeto com nome "Objecto (2)" e layer padrão, sem comportamento, mas com o mesmo renderizador do primeiro objeto, e posiciona-o em (0, -2, 0)
-	gep3d::Object* object2 = new gep3d::Object("Objecto (2)", "", nullptr, renderer, 0.0f, -2.0f, 0.0f);
+    // CONTROLADOR DE LUZES
+    LightController* l_controller = new LightController(ambient_light, dir_light, point_light, spot_light);
 
-	LOG("Object created with ID: " << object1->id() << " at position: (0, -4, 0).");
-	LOG("Object created with ID: " << object2->id() << " at position: (0, -2, 0).");
+    // MESA DE BILHAR (Onde acoplamos o LightController para ouvir o teclado)
+    Renderer* renderer_mesa = new Renderer(shader, "mesa.obj");
+    Object* mesa = new Object(
+        "Mesa de Bilhar",
+        "Default",
+        l_controller,
+        renderer_mesa,
+        0.0f, -1.15f, -5.0f,
+        0.0f, 0.0f, 0.0f,
+        20.0f, 0.1f, 30.0f
+    );
+    game.AddObject(mesa);
 
-	// --------------------------------------------------
-	// Adiciona o(s) objeto(s) ao jogo
-	// --------------------------------------------------
-	game.AddObject(object1);
-	game.AddObject(object2);
+    // POSIÇÕES DO TRIÂNGULO COMPLETO (15 BOLAS)
+    float d = 2.1f;
+    float h = d * 0.866f;
 
-	// --------------------------------------------------
-	// Inicia o loop do jogo
-	// --------------------------------------------------
-	game.Run();
+    glm::vec3 posicoes[15] = {
+        glm::vec3(0.0f, 0.0f, 0.0f),                                                            // Linha 1 (Vértice do triângulo)
+        glm::vec3(-d / 2, 0.0f, -h), glm::vec3(d / 2, 0.0f, -h),                                // Linha 2
+        glm::vec3(-d, 0.0f, -2 * h), glm::vec3(0.0f, 0.0f, -2 * h), glm::vec3(d, 0.0f, -2 * h), // Linha 3
+        glm::vec3(-1.5f * d, 0.0f, -3 * h), glm::vec3(-0.5f * d, 0.0f, -3 * h), glm::vec3(0.5f * d, 0.0f, -3 * h), glm::vec3(1.5f * d, 0.0f, -3 * h), // Linha 4
+        glm::vec3(-2.0f * d, 0.0f, -4 * h), glm::vec3(-1.0f * d, 0.0f, -4 * h), glm::vec3(0.0f, 0.0f, -4 * h), glm::vec3(1.0f * d, 0.0f, -4 * h), glm::vec3(2.0f * d, 0.0f, -4 * h) // Linha 5
+    };
 
-	// --------------------------------------------------
-	// Liberta a memória alocada para os recursos do jogo
-	// --------------------------------------------------
-	delete shader;		// Liberta a memória alocada para o shader
-	delete renderer;	// Liberta a memória alocada para o renderizador
-	delete oscilator;	// Liberta a memória alocada para o comportamento
-	delete object1;		// Liberta a memória alocada para o objeto
-	delete object2;		// Liberta a memória alocada para o objeto
+    // CRIAR AS 15 BOLAS COM A ANIMAÇÃO ATIVA
+    for (int i = 1; i <= 15; i++) {
+        std::string filename = "Ball" + std::to_string(i) + ".obj";
+        Renderer* renderer = new Renderer(shader, filename);
 
-	LOG("Exit!");
+        // Atribui uma nova instância do comportamento a cada bola
+        BilliardStrike* strike = new BilliardStrike();
 
-	return 0;
+        Object* ball = new Object(
+            "Bola " + std::to_string(i),
+            "Default",
+            strike,                         // Agora a animação é igual para TODAS
+            renderer,
+            posicoes[i - 1].x, posicoes[i - 1].y, posicoes[i - 1].z
+        );
+        game.AddObject(ball);
+    }
+
+    // Iniciar Jogo
+    game.Run();
+    return 0;
 }

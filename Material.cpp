@@ -78,6 +78,8 @@ namespace game_engine_p3d {
 		}
 
 		if (shader_) {
+			shader_->SetUniform<int>("hasTexture", texture_.size() > 0 ? 1 : 0);
+
 			shader_->SetUniform<glm::vec3>(kMaterialAmbientName, ka_);
 			shader_->SetUniform<glm::vec3>(kMaterialDiffuseName, kd_);
 			shader_->SetUniform<glm::vec3>(kMaterialSpecularName, ks_);
